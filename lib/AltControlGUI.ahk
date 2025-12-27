@@ -48,7 +48,7 @@ nm_AltControlGUI(*) {
     AltControlGui.Add("DropDownList", "x120 y163 w150 h200 vAltPatternSelect", AltControlPatterns)
     AltControlGui.Add("Button", "x280 y138 w100 h30 vAltSendGatherButton", "Enviar a Recolectar").OnEvent("Click", nm_AltSendGather)
     AltControlGui.Add("Button", "x280 y173 w100 h30 vAltStopButton", "Detener Alt").OnEvent("Click", nm_AltStopGUI)
-    AltControlGui.Add("Button", "x280 y208 w100 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHive)
+    AltControlGui.Add("Button", "x280 y208 w100 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
     
     ; Estado de la Alt
     AltControlGui.Add("GroupBox", "x10 y330 w480 h100", "Estado de Alt Account")
@@ -98,7 +98,7 @@ nm_AltTestConnection(*) {
     if (!IsSet(AltController))
         AltController := AltControl()
     
-    AltController.Init(altIP, sharePath)
+    AltController.InitFileShare(altIP, sharePath)
     
     if (AltController.TestConnection()) {
         MsgBox "Conexion exitosa!", "Exito", 0x40040
@@ -180,7 +180,7 @@ nm_AltStopGUI(*) {
 }
 
 ; Envia comando para que la alt regrese al hive
-nm_AltReturnToHive(*) {
+nm_AltReturnToHiveGUI(*) {
     global AltControlGui, AltController
     
     if (!IsSet(AltController) || !AltController.IsEnabled) {

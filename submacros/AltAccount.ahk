@@ -2,9 +2,8 @@
 Natro Macro (https://github.com/NatroTeam/NatroMacro)
 Copyright © Natro Team (https://github.com/NatroTeam)
 
-Este archivo es parte de Natro Macro. Nuestro código fuente siempre será abierto y disponible.
-
 Script para Alt Account - Escucha comandos del macro principal y los ejecuta
+Usa el sistema abstracto de comunicacion para recibir comandos
 */
 
 #Requires AutoHotkey v2.0
@@ -19,6 +18,7 @@ Script para Alt Account - Escucha comandos del macro principal y los ejecuta
 #Include "DurationFromSeconds.ahk"
 #Include "nowUnix.ahk"
 #Include "Walk.ahk"
+#Include "MacroCommunication.ahk"
 
 OnError (e, mode) => (mode = "Return") ? -1 : 0
 SetWorkingDir A_ScriptDir "\.."
@@ -30,27 +30,54 @@ SendMode "Event"
 AltState := "idle"
 CurrentField := ""
 CurrentAction := ""
-CommandFile := ""
-StatusFile := ""
-LastCommandTime := 0
+AltCommunication := ""
 CommandCheckInterval := 1000
 
 ; Inicializacion
-if (A_Args.Length < 2) {
-    MsgBox "Uso: AltAccount.ahk <ruta_compartida> <archivo_comando> <archivo_estado>`n`nEjemplo: AltAccount.ahk \\192.168.1.100\NatroMacro alt_command.txt alt_status.txt", "Error", 0x40010
+; Parametros: <tipo_comunicacion> <config_json_o_ruta>
+; Ejemplo: fileshare \\192.168.1.100\NatroMacro
+; O: fileshare {"sharePath": "\\192.168.1.100\NatroMacro", "commandFile": "alt_command.txt", "statusFile": "alt_status.txt"}
+if (A_Args.Length < 1) {
+    MsgBox "Uso: AltAccount.ahk <tipo_comunicacion> [configuracion]`n`nEjemplos:`n  AltAccount.ahk fileshare \\192.168.1.100\NatroMacro`n  AltAccount.ahk fileshare `"{\`"sharePath\`": \`"\\\\192.168.1.100\\NatroMacro\`"}`"", "Error", 0x40010
     ExitApp
 }
 
-SharePath := A_Args[1]
-CommandFile := SharePath "\" A_Args[2]
-StatusFile := SharePath "\" A_Args[3]
+commType := A_Args[1]
+config := Map()
 
-; Verificar que los archivos existan o crearlos
-try {
-    if (!FileExist(SharePath))
-        DirCreate SharePath
-} catch {
-    MsgBox "No se puede acceder a la ruta compartida: " SharePath, "Error", 0x40010
+; Parsear configuracion
+if (A_Args.Length >= 2) {
+    configStr := A_Args[2]
+    
+    ; Si es una ruta simple (legacy), convertir a config
+    if (InStr(configStr, "\\") = 1 || InStr(configStr, "/") = 1) {
+        ; Es una ruta de archivo compartido
+        config["sharePath"] := configStr
+        config["commandFile"] := (A_Args.Length >= 3) ? A_Args[3] : "alt_command.txt"
+        config["statusFile"] := (A_Args.Length >= 4) ? A_Args[4] : "alt_status.txt"
+    } else {
+        ; Intentar parsear como JSON
+        try {
+            #Include "JSON.ahk"
+            configObj := JSON.Load(configStr)
+            for key, value in configObj.OwnProps()
+                config[key] := value
+        } catch {
+            ; Si falla, tratar como ruta simple
+            config["sharePath"] := configStr
+            config["commandFile"] := "alt_command.txt"
+            config["statusFile"] := "alt_status.txt"
+        }
+    }
+} else {
+    ; Configuracion por defecto
+    config := CommunicationFactory.GetDefaultConfig(commType)
+}
+
+; Inicializar comunicacion
+AltCommunication := MacroCommunication()
+if (!AltCommunication.Init(commType, config)) {
+    MsgBox "Error al inicializar comunicacion. Tipo: " commType, "Error", 0x40010
     ExitApp
 }
 
@@ -82,145 +109,30 @@ FieldPatternSize := "M"
 FieldPatternReps := 1
 MoveSpeedNum := 20
 NewWalk := true
+currentWalk := {pid: "", name: ""}
+
+; Declarar ruta del ejecutable (necesario para nm_createWalk)
+exe_path64 := (A_Is64bitOS && FileExist("submacros\AutoHotkey64.exe")) ? (A_WorkingDir "\submacros\AutoHotkey64.exe") : A_AhkPath
 
 ; Importar patrones
 nm_importPatterns()
 
 ; Funcion para actualizar el estado
 UpdateStatus(status, field := "", action := "") {
-    global AltState, CurrentField, CurrentAction, StatusFile
+    global AltState, CurrentField, CurrentAction, AltCommunication
+    
     AltState := status
     CurrentField := field
     CurrentAction := action
     
-    try {
-        file := FileOpen(StatusFile, "w-d")
-        if (file) {
-            file.Write("status=" status "|field=" field "|action=" action "|time=" nowUnix())
-            file.Close()
-        }
-    } catch {
-        ; Error al escribir estado, continuar
-    }
-}
-
-; Funcion para leer comandos
-ReadCommand() {
-    global CommandFile, LastCommandTime
+    statusMap := Map(
+        "status", status,
+        "field", field,
+        "action", action,
+        "time", nowUnix()
+    )
     
-    try {
-        if (!FileExist(CommandFile))
-            return ""
-        
-        ; Solo leer si el archivo fue modificado recientemente
-        FileGetTime fileTime, CommandFile
-        if (fileTime <= LastCommandTime)
-            return ""
-        
-        file := FileOpen(CommandFile, "r")
-        if (!file)
-            return ""
-        
-        command := Trim(file.Read())
-        file.Close()
-        
-        ; Limpiar el archivo de comando despues de leerlo
-        try {
-            FileDelete CommandFile
-        } catch {
-            ; Ignorar error si no se puede borrar
-        }
-        
-        LastCommandTime := fileTime
-        return command
-    } catch {
-        return ""
-    }
-}
-
-; Funcion para ir a un campo usando los paths existentes
-nm_gotoField(location) {
-    global paths, HiveConfirmed := 0
-    
-    path := paths["gtf"][StrReplace(location, " ")]
-    if (!path) {
-        UpdateStatus("error", "", "Path no encontrado para: " location)
-        return 0
-    }
-    
-    nm_setShiftLock(0)
-    nm_createPath(path)
-    KeyWait "F14", "D T5 L"
-    KeyWait "F14", "T120 L"
-    nm_endWalk()
-    return 1
-}
-
-; Funcion para recolectar en un campo
-nm_AltGather(fieldName, pattern := "Snake") {
-    global FieldPattern, FieldPatternSize, FieldPatternReps, patterns
-    
-    UpdateStatus("traveling", fieldName, "Going to field")
-    
-    ; Ir al campo
-    if (!nm_gotoField(fieldName)) {
-        UpdateStatus("error", fieldName, "Failed to reach field")
-        return 0
-    }
-    
-    UpdateStatus("gathering", fieldName, "Collecting pollen")
-    
-    ; Verificar que el patron existe
-    if (!patterns.Has(pattern))
-        pattern := "Snake"
-    
-    FieldPattern := pattern
-    
-    ; Iniciar recoleccion
-    nm_gather(pattern, 1, FieldPatternSize, FieldPatternReps, 0)
-    
-    ; Mantener la recoleccion activa
-    Loop {
-        ; Verificar si hay un nuevo comando
-        command := ReadCommand()
-        if (command != "") {
-            if (InStr(command, "STOP") || InStr(command, "RETURN_HIVE"))
-                break
-        }
-        
-        ; Continuar el patron de recoleccion
-        if (KeyWait("F14", "D T0.1 L") = 0) {
-            ; El patron termino, iniciar uno nuevo
-            nm_gather(pattern, 1, FieldPatternSize, FieldPatternReps, 0)
-        }
-        
-        Sleep 100
-    }
-    
-    UpdateStatus("idle", "", "")
-    return 1
-}
-
-; Funcion para regresar al hive
-nm_AltReturnToHive() {
-    global CurrentField
-    
-    if (CurrentField = "")
-        return 1
-    
-    UpdateStatus("traveling", "", "Returning to hive")
-    
-    path := paths["wf"][StrReplace(CurrentField, " ")]
-    if (path) {
-        nm_setShiftLock(0)
-        nm_createPath(path)
-        KeyWait "F14", "D T5 L"
-        KeyWait "F14", "T120 L"
-        nm_endWalk()
-    }
-    
-    UpdateStatus("idle", "", "")
-    return 1
+    AltCommunication.WriteStatus(statusMap)
 }
 
 ; Funcion para procesar comandos
@@ -255,9 +167,95 @@ ProcessCommand(command) {
     UpdateStatus("error", "", "Unknown command: " command)
 }
 
-; Funciones auxiliares necesarias
+; Funcion para ir a un campo usando los paths existentes
+nm_gotoField(location) {
+    global paths, HiveConfirmed := 0
+    
+    path := paths["gtf"][StrReplace(location, " ")]
+    if (!path) {
+        UpdateStatus("error", "", "Path no encontrado para: " location)
+        return 0
+    }
+    
+    nm_setShiftLock(0)
+    nm_createPath(path)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T120 L"
+    nm_endWalk()
+    return 1
+}
+
+; Funcion para recolectar en un campo
+nm_AltGather(fieldName, pattern := "Snake") {
+    global FieldPattern, FieldPatternSize, FieldPatternReps, patterns, CurrentField
+    
+    UpdateStatus("traveling", fieldName, "Going to field")
+    
+    ; Ir al campo
+    if (!nm_gotoField(fieldName)) {
+        UpdateStatus("error", fieldName, "Failed to reach field")
+        return 0
+    }
+    
+    CurrentField := fieldName
+    UpdateStatus("gathering", fieldName, "Collecting pollen")
+    
+    ; Verificar que el patron existe
+    if (!patterns.Has(pattern))
+        pattern := "Snake"
+    
+    FieldPattern := pattern
+    
+    ; Iniciar recoleccion
+    nm_gather(pattern, 1, FieldPatternSize, FieldPatternReps, 0)
+    
+    ; Mantener la recoleccion activa
+    Loop {
+        ; Verificar si hay un nuevo comando
+        command := AltCommunication.ReceiveCommand()
+        if (command != "") {
+            if (InStr(command, "STOP") || InStr(command, "RETURN_HIVE"))
+                break
+        }
+        
+        ; Continuar el patron de recoleccion
+        if (KeyWait("F14", "D T0.1 L") = 0) {
+            ; El patron termino, iniciar uno nuevo
+            nm_gather(pattern, 1, FieldPatternSize, FieldPatternReps, 0)
+        }
+        
+        Sleep 100
+    }
+    
+    UpdateStatus("idle", "", "")
+    return 1
+}
+
+; Funcion para regresar al hive
+nm_AltReturnToHive() {
+    global CurrentField, paths
+    
+    if (CurrentField = "")
+        return 1
+    
+    UpdateStatus("traveling", "", "Returning to hive")
+    
+    path := paths["wf"][StrReplace(CurrentField, " ")]
+    if (path) {
+        nm_setShiftLock(0)
+        nm_createPath(path)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T120 L"
+        nm_endWalk()
+    }
+    
+    CurrentField := ""
+    UpdateStatus("idle", "", "")
+    return 1
+}
+
+; Funciones auxiliares necesarias (simplificadas)
 nm_setShiftLock(state) {
-    ; Implementacion simplificada
     return
 }
 
@@ -290,11 +288,9 @@ nm_KeyVars() {
 }
 
 nm_createWalk(movement, name := "", vars := "") {
-    ; Implementacion simplificada usando el sistema existente
     global exe_path64, MoveSpeedNum, NewWalk, currentWalk
     
-    ; Reutilizar la funcion existente del macro principal
-    ; Esta es una version simplificada
+    ; Reutilizar la implementacion del macro principal
     script :=
     (
     '
@@ -335,7 +331,8 @@ nm_createWalk(movement, name := "", vars := "") {
     . (
     (
     '
-    offsetY := ' GetYOffset() '
+    hwnd := GetRobloxHWND()
+    offsetY := GetYOffset(hwnd)
     ' nm_KeyVars() '
     ' vars '
 
@@ -384,7 +381,6 @@ nm_endWalk() {
         try {
             ProcessClose(currentWalk.pid)
         } catch {
-            ; Ignorar error
         }
         currentWalk.pid := ""
         currentWalk.name := ""
@@ -393,7 +389,7 @@ nm_endWalk() {
 
 nm_gather(pattern, index, patternsize := "M", reps := 1, facingcorner := 0) {
     global patterns, FieldName, FieldPattern, FieldPatternSize, FieldPatternReps
-    global FieldUntilMins, FieldUntilPack, FieldReturnType
+    global FieldUntilMins, FieldUntilPack, FieldReturnType, currentWalk
     
     if (!patterns.Has(pattern)) {
         pattern := "Snake"
@@ -444,7 +440,6 @@ nm_importPaths() {
                 paths[k][v] := file.Read()
                 file.Close()
             } catch {
-                ; Path no encontrado, continuar
             }
         }
     }
@@ -470,7 +465,7 @@ UpdateStatus("idle", "", "")
 ; Loop principal
 Loop {
     ; Verificar comandos
-    command := ReadCommand()
+    command := AltCommunication.ReceiveCommand()
     if (command != "") {
         ProcessCommand(command)
     }
@@ -486,6 +481,6 @@ Loop {
 ; Cleanup al salir
 OnExit((*) => (
     UpdateStatus("offline", "", ""),
+    AltCommunication.Close(),
     Gdip_Shutdown(pToken)
 ))
-

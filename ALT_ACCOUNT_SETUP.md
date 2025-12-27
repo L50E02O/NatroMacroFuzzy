@@ -43,10 +43,9 @@ En la computadora donde corre la alt account:
 
 1. Asegurate de que Roblox y Bee Swarm Simulator esten abiertos
 2. Ejecuta `START_ALT.bat` desde la carpeta de Natro Macro
-3. Cuando se te pida:
-   - Ingresa la IP de la computadora principal
-   - Ingresa la ruta compartida (la misma que configuraste en el paso 2)
-4. El script de alt account comenzara a escuchar comandos
+3. Cuando se te pida, ingresa la ruta compartida (la misma que configuraste en el paso 2)
+   - Ejemplo: `\\192.168.1.100\NatroMacro`
+4. El script de alt account comenzara a escuchar comandos automaticamente
 
 ## Uso
 

@@ -2492,9 +2492,9 @@ MainGui.Add("GroupBox", "x5 y24 w160 h144", "Hive Tools")
 MainGui.Add("GroupBox", "x5 y168 w160 h62", "Other Tools")
 MainGui.Add("GroupBox", "x170 y24 w160 h144", "Calculators")
 MainGui.Add("GroupBox", "x170 y168 w160 h62 vAutoClickerButton", "AutoClicker (" AutoClickerHotkey ")")
-MainGui.Add("GroupBox", "x335 y24 w160 h84", "Macro Tools")
-MainGui.Add("GroupBox", "x335 y108 w160 h60", "Discord Tools")
-MainGui.Add("GroupBox", "x335 y168 w160 h62", "Bugs and Suggestions")
+MainGui.Add("GroupBox", "x335 y24 w160 h104", "Macro Tools")
+MainGui.Add("GroupBox", "x335 y128 w160 h60", "Discord Tools")
+MainGui.Add("GroupBox", "x335 y188 w160 h62", "Bugs and Suggestions")
 MainGui.SetFont("s9 cDefault Norm", "Tahoma")
 ;hive tools
 MainGui.Add("Button", "x10 y40 w150 h40 vBasicEggHatcherButton Disabled", "Gifted Basic Bee`nAuto-Hatcher").OnEvent("Click", nm_BasicEggHatcher)
@@ -2514,10 +2514,10 @@ MainGui.Add("Button", "x340 y62 w150 h20 vDebugLogGUI Disabled", "Debug Log Opti
 MainGui.Add("Button", "x340 y84 w150 h20 vAutoStartManagerGUI Disabled", "Auto-Start Manager").OnEvent("Click", nm_AutoStartManager)
 MainGui.Add("Button", "x340 y106 w150 h20 vAltControlGUI Disabled", "Alt Account Control").OnEvent("Click", nm_AltControlGUI)
 ;discord tools
-MainGui.Add("Button", "x340 y124 w150 h40 vNightAnnouncementGUI Disabled", "Night Detection`nAnnouncement").OnEvent("Click", nm_NightAnnouncementGUI)
+MainGui.Add("Button", "x340 y144 w150 h40 vNightAnnouncementGUI Disabled", "Night Detection`nAnnouncement").OnEvent("Click", nm_NightAnnouncementGUI)
 ;reporting
-MainGui.Add("Button", "x340 y184 w150 h20 vReportBugButton Disabled", "Report Bugs").OnEvent("Click", nm_ReportBugButton)
-MainGui.Add("Button", "x340 y206 w150 h20 vMakeSuggestionButton Disabled", "Make Suggestions").OnEvent("Click", nm_MakeSuggestionButton)
+MainGui.Add("Button", "x340 y204 w150 h20 vReportBugButton Disabled", "Report Bugs").OnEvent("Click", nm_ReportBugButton)
+MainGui.Add("Button", "x340 y226 w150 h20 vMakeSuggestionButton Disabled", "Make Suggestions").OnEvent("Click", nm_MakeSuggestionButton)
 MainGui.SetFont("s8 cDefault Norm", "Tahoma")
 
 ; STATUS TAB
@@ -4029,6 +4029,7 @@ nm_TabMiscLock(){
 	MainGui["HotkeyGUI"].Enabled := 0
 	MainGui["DebugLogGUI"].Enabled := 0
 	MainGui["AutoStartManagerGUI"].Enabled := 0
+	MainGui["AltControlGUI"].Enabled := 0
 	MainGui["NightAnnouncementGUI"].Enabled := 0
 	MainGui["ReportBugButton"].Enabled := 0
 	MainGui["MakeSuggestionButton"].Enabled := 0
@@ -4045,6 +4046,7 @@ nm_TabMiscUnLock(){
 	MainGui["HotkeyGUI"].Enabled := 1
 	MainGui["DebugLogGUI"].Enabled := 1
 	MainGui["AutoStartManagerGUI"].Enabled := 1
+	MainGui["AltControlGUI"].Enabled := 1
 	MainGui["NightAnnouncementGUI"].Enabled := 1
 	MainGui["ReportBugButton"].Enabled := 1
 	MainGui["MakeSuggestionButton"].Enabled := 1

@@ -2,95 +2,62 @@
 Natro Macro (https://github.com/NatroTeam/NatroMacro)
 Copyright © Natro Team (https://github.com/NatroTeam)
 
-Este archivo es parte de Natro Macro. Nuestro código fuente siempre será abierto y disponible.
-
-Natro Macro es software libre: puedes redistribuirlo y/o modificarlo bajo los términos de la GNU General Public License.
+Sistema de control de Alt Account usando comunicacion abstracta entre macros
 */
 
-; Sistema de control de Alt Account
-; Utiliza archivos compartidos en red para comunicacion entre el macro principal y la alt account
+#Include "MacroCommunication.ahk"
 
+; Clase principal para controlar una alt account
 class AltControl {
-    static CommandFile := ""
-    static StatusFile := ""
-    static AltIP := ""
-    static AltSharePath := ""
-    static IsEnabled := false
+    Communication := ""
+    IsEnabled := false
+    ConnectionType := "fileshare"
     
     ; Inicializa el sistema de control de alt
-    ; altIP: IP de la computadora donde corre la alt account
-    ; sharePath: Ruta compartida en red (ej: \\192.168.1.100\NatroMacro)
-    Init(altIP, sharePath) {
-        this.AltIP := altIP
-        this.AltSharePath := sharePath
-        this.CommandFile := sharePath "\alt_command.txt"
-        this.StatusFile := sharePath "\alt_status.txt"
+    ; type: Tipo de comunicacion ("fileshare", "tcp", etc.)
+    ; config: Map con la configuracion de la comunicacion
+    ;   Para fileshare: {"sharePath": "\\192.168.1.100\NatroMacro", "commandFile": "alt_command.txt", "statusFile": "alt_status.txt"}
+    ;   Para tcp: {"host": "192.168.1.100", "port": 8888, "isServer": false}
+    ; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
+    Init(type := "fileshare", config := Map()) {
+        this.ConnectionType := type
+        this.Communication := MacroCommunication()
+        
+        if (!this.Communication.Init(type, config))
+            return 0
+        
         this.IsEnabled := true
+        return 1
+    }
+    
+    ; Inicializa usando archivos compartidos (metodo legacy para compatibilidad)
+    ; altIP: IP de la computadora donde corre la alt account (no se usa, solo para compatibilidad)
+    ; sharePath: Ruta compartida en red
+    ; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
+    InitFileShare(altIP := "", sharePath := "") {
+        config := Map(
+            "sharePath", sharePath,
+            "commandFile", "alt_command.txt",
+            "statusFile", "alt_status.txt"
+        )
+        return this.Init("fileshare", config)
     }
     
     ; Envia un comando a la alt account
     ; command: Comando a ejecutar (ej: "GATHER Sunflower", "STOP", "STATUS")
     ; Devuelve: 1 si se envio correctamente, 0 si hubo error
     SendCommand(command) {
-        if (!this.IsEnabled || this.CommandFile = "")
+        if (!this.IsEnabled)
             return 0
-        
-        try {
-            file := FileOpen(this.CommandFile, "w")
-            if (!file) {
-                ; Intentar crear el archivo si no existe
-                file := FileOpen(this.CommandFile, "w-d")
-                if (!file)
-                    return 0
-            }
-            file.Write(command)
-            file.Close()
-            return 1
-        } catch {
-            return 0
-        }
+        return this.Communication.SendCommand(command)
     }
     
     ; Lee el estado actual de la alt account
     ; Devuelve: Map con el estado o 0 si hay error
     GetStatus() {
-        if (!this.IsEnabled || this.StatusFile = "")
+        if (!this.IsEnabled)
             return 0
-        
-        try {
-            if (!FileExist(this.StatusFile))
-                return Map("status", "offline", "field", "", "action", "")
-            
-            file := FileOpen(this.StatusFile, "r")
-            if (!file)
-                return 0
-            
-            content := file.Read()
-            file.Close()
-            
-            ; Parsear el contenido del estado
-            ; Formato esperado: status=value|field=value|action=value
-            statusMap := Map()
-            Loop Parse content, "|" {
-                if (InStr(A_LoopField, "=")) {
-                    parts := StrSplit(A_LoopField, "=", , 2)
-                    if (parts.Length = 2)
-                        statusMap[Trim(parts[1])] := Trim(parts[2])
-                }
-            }
-            
-            ; Valores por defecto si faltan
-            if (!statusMap.Has("status"))
-                statusMap["status"] := "unknown"
-            if (!statusMap.Has("field"))
-                statusMap["field"] := ""
-            if (!statusMap.Has("action"))
-                statusMap["action"] := ""
-            
-            return statusMap
-        } catch {
-            return 0
-        }
+        return this.Communication.ReadStatus()
     }
     
     ; Envia comando para que la alt vaya a un campo y recolecte
@@ -119,38 +86,64 @@ class AltControl {
     ; Verifica si la alt account esta conectada y respondiendo
     ; Devuelve: 1 si esta conectada, 0 si no
     IsConnected() {
-        status := this.GetStatus()
-        if (status = 0)
+        if (!this.IsEnabled)
             return 0
-        return (status["status"] != "offline" && status["status"] != "unknown")
+        return this.Communication.IsConnected()
     }
     
-    ; Verifica si la conexion a la red compartida esta disponible
+    ; Verifica si la conexion esta disponible
     ; Devuelve: 1 si esta disponible, 0 si no
     TestConnection() {
-        if (this.AltSharePath = "")
+        if (!this.Communication)
             return 0
-        
+        return this.Communication.TestConnection()
+    }
+    
+    ; Cierra la conexion y limpia recursos
+    Close() {
+        if (this.Communication) {
+            this.Communication.Close()
+            this.Communication := ""
+        }
+        this.IsEnabled := false
+    }
+}
+
+; Funcion global para inicializar el control de alt (compatibilidad legacy)
+; altIP: IP de la computadora de la alt (no se usa realmente, solo para compatibilidad)
+; sharePath: Ruta compartida en red
+; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
+nm_InitAltControl(altIP := "", sharePath := "") {
+    global AltController
+    if (!IsSet(AltController))
+        AltController := AltControl()
+    
+    if (sharePath = "") {
+        ; Intentar leer de configuracion
         try {
-            ; Intentar acceder al directorio compartido
-            if (DirExist(this.AltSharePath))
-                return 1
-            return 0
+            sharePath := IniRead("settings\nm_config.ini", "AltControl", "AltSharePath", "")
+            if (sharePath = "")
+                return 0
         } catch {
             return 0
         }
     }
+    
+    result := AltController.InitFileShare(altIP, sharePath)
+    if (result)
+        return AltController.TestConnection()
+    return 0
 }
 
-; Funcion global para inicializar el control de alt
-; altIP: IP de la computadora de la alt
-; sharePath: Ruta compartida en red
-nm_InitAltControl(altIP, sharePath) {
+; Funcion global para inicializar el control de alt con configuracion avanzada
+; type: Tipo de comunicacion ("fileshare", "tcp", etc.)
+; config: Map con la configuracion
+; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
+nm_InitAltControlAdvanced(type, config) {
     global AltController
     if (!IsSet(AltController))
         AltController := AltControl()
-    AltController.Init(altIP, sharePath)
-    return AltController.TestConnection()
+    return AltController.Init(type, config)
 }
 
 ; Funcion global para enviar comando de recoleccion a la alt
@@ -192,4 +185,3 @@ nm_AltIsConnected() {
         return 0
     return AltController.IsConnected()
 }
-
