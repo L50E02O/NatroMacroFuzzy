@@ -75,10 +75,11 @@ nm_AltControlGUIClose(*) {
 ; Maneja el redimensionamiento de la GUI
 nm_AltControlGUISize(GuiObj, MinMax, Width, Height) {
     ; Mantener tamaño minimo
-    if (Width < 500)
-        GuiObj[""].Move(, , 500)
-    if (Height < 440)
-        GuiObj[""].Move(, , , 440)
+    newWidth := Width < 500 ? 500 : Width
+    newHeight := Height < 440 ? 440 : Height
+    
+    if (newWidth != Width || newHeight != Height)
+        GuiObj.Show("w" newWidth " h" newHeight)
 }
 
 ; Prueba la conexion con la alt account

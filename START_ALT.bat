@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 > nul
 cd %~dp0
 
@@ -33,7 +34,7 @@ if [%1]==[] (
     echo.
     set /p sharePath="Ingresa la ruta compartida: "
     
-    if [%sharePath%]==[] (
+    if "!sharePath!"=="" (
         echo.
         echo [ERROR] Debes proporcionar la ruta compartida
         echo.
@@ -46,13 +47,13 @@ if [%1]==[] (
 
 echo.
 echo Iniciando Alt Account...
-echo Ruta compartida: %sharePath%
+echo Ruta compartida: !sharePath!
 echo.
 echo La Alt Account comenzara a escuchar comandos del macro principal.
 echo Puedes cerrar esta ventana despues de iniciar.
 echo.
 
-start "" "%~dp0submacros\AutoHotkey32.exe" "%~dp0submacros\AltAccount.ahk" "fileshare" "%sharePath%"
+start "" "%~dp0submacros\AutoHotkey32.exe" "%~dp0submacros\AltAccount.ahk" "fileshare" "!sharePath!"
 
 timeout /t 2 >nul
 echo.
