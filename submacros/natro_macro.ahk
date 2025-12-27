@@ -29,6 +29,8 @@ You should have received a copy of the license along with Natro Macro. If not, p
 #Include "Roblox.ahk"
 #Include "DurationFromSeconds.ahk"
 #Include "nowUnix.ahk"
+#Include "AltControl.ahk"
+#Include "AltControlGUI.ahk"
 
 #Warn VarUnset, Off
 OnError (e, mode) => (mode = "Return") ? -1 : 0
@@ -2510,6 +2512,7 @@ MainGui.Add("Button", "x175 y184 w150 h42 vAutoClickerGUI Disabled", "AutoClicke
 MainGui.Add("Button", "x340 y40 w150 h20 vHotkeyGUI Disabled", "Change Hotkeys").OnEvent("Click", nm_HotkeyGUI)
 MainGui.Add("Button", "x340 y62 w150 h20 vDebugLogGUI Disabled", "Debug Log Options").OnEvent("Click", nm_DebugLogGUI)
 MainGui.Add("Button", "x340 y84 w150 h20 vAutoStartManagerGUI Disabled", "Auto-Start Manager").OnEvent("Click", nm_AutoStartManager)
+MainGui.Add("Button", "x340 y106 w150 h20 vAltControlGUI Disabled", "Alt Account Control").OnEvent("Click", nm_AltControlGUI)
 ;discord tools
 MainGui.Add("Button", "x340 y124 w150 h40 vNightAnnouncementGUI Disabled", "Night Detection`nAnnouncement").OnEvent("Click", nm_NightAnnouncementGUI)
 ;reporting
