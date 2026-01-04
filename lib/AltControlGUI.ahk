@@ -29,25 +29,28 @@ nm_AltControlGUI(*) {
     AltControlGui.OnEvent("Close", nm_AltControlGUIClose)
     
     ; Configuracion simple (como Revolution Macro)
-    AltControlGui.Add("GroupBox", "x10 y10 w480 h80", "Conexion")
+    AltControlGui.Add("GroupBox", "x10 y10 w480 h105", "Conexion")
     AltControlGui.Add("Text", "x20 y30 w120 +BackgroundTrans", "Nombre de Ventana:")
     AltControlGui.Add("Edit", "x140 y28 w250 h20 vAltWindowEdit", "AltAccount.ahk ahk_class AutoHotkey")
     AltControlGui.Add("Button", "x400 y28 w80 h20 vAltConnectButton", "Conectar").OnEvent("Click", nm_AltConnect)
-    AltControlGui.Add("Text", "x20 y55 w460 +BackgroundTrans vAltStatusText", "Estado: No conectado")
+    AltControlGui.Add("Text", "x20 y55 w120 +BackgroundTrans", "Numero de Hive:")
+    AltControlGui.Add("Edit", "x140 y53 w50 h20 vAltHiveSlotEdit", "1")
+    AltControlGui.Add("Text", "x195 y55 w285 +BackgroundTrans", "(1-6, necesario para paths correctos)")
+    AltControlGui.Add("Text", "x20 y80 w460 +BackgroundTrans vAltStatusText", "Estado: No conectado")
     
     ; Control de campos
-    AltControlGui.Add("GroupBox", "x10 y100 w480 h150", "Asignar Campo")
-    AltControlGui.Add("Text", "x20 y120 w100 +BackgroundTrans", "Campo:")
-    AltControlGui.Add("DropDownList", "x120 y118 w150 h200 vAltFieldSelect", AltControlFields)
-    AltControlGui.Add("Text", "x20 y145 w100 +BackgroundTrans", "Patron:")
-    AltControlGui.Add("DropDownList", "x120 y143 w150 h200 vAltPatternSelect", AltControlPatterns)
-    AltControlGui.Add("Button", "x280 y118 w100 h30 vAltSendGatherButton", "Enviar a Recolectar").OnEvent("Click", nm_AltSendGather)
-    AltControlGui.Add("Button", "x280 y153 w100 h30 vAltStopButton", "Detener").OnEvent("Click", nm_AltStopGUI)
-    AltControlGui.Add("Button", "x390 y118 w90 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
+    AltControlGui.Add("GroupBox", "x10 y125 w480 h150", "Asignar Campo")
+    AltControlGui.Add("Text", "x20 y145 w100 +BackgroundTrans", "Campo:")
+    AltControlGui.Add("DropDownList", "x120 y143 w150 h200 vAltFieldSelect", AltControlFields)
+    AltControlGui.Add("Text", "x20 y170 w100 +BackgroundTrans", "Patron:")
+    AltControlGui.Add("DropDownList", "x120 y168 w150 h200 vAltPatternSelect", AltControlPatterns)
+    AltControlGui.Add("Button", "x280 y143 w100 h30 vAltSendGatherButton", "Enviar a Recolectar").OnEvent("Click", nm_AltSendGather)
+    AltControlGui.Add("Button", "x280 y178 w100 h30 vAltStopButton", "Detener").OnEvent("Click", nm_AltStopGUI)
+    AltControlGui.Add("Button", "x390 y143 w90 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
     
     ; Estado de la Alt
-    AltControlGui.Add("GroupBox", "x10 y260 w480 h80", "Estado de Alt Account")
-    AltControlGui.Add("Text", "x20 y280 w460 h60 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
+    AltControlGui.Add("GroupBox", "x10 y285 w480 h80", "Estado de Alt Account")
+    AltControlGui.Add("Text", "x20 y305 w460 h60 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
     
     ; Timer para actualizar estado
     SetTimer nm_AltUpdateStatus, 1000
@@ -58,7 +61,7 @@ nm_AltControlGUI(*) {
         nm_AltConnect()
     }
     
-    AltControlGui.Show("w500 h350")
+    AltControlGui.Show("w500 h375")
     nm_AltUpdateStatus()
 }
 
@@ -107,15 +110,22 @@ nm_AltSendGather(*) {
     AltControlGui.Submit(false)
     fieldName := AltControlGui["AltFieldSelect"].Text
     pattern := AltControlGui["AltPatternSelect"].Text
+    hiveSlot := AltControlGui["AltHiveSlotEdit"].Value
     
     if (fieldName = "") {
         MsgBox "Por favor selecciona un campo", "Error", 0x40010
         return
     }
     
-    if (nm_AltGather(fieldName, pattern)) {
-        AltControlGui["AltStateText"].Text := "Comando enviado: Recolectar en " fieldName
-        nm_setStatus("Sent", "Alt: Gather " fieldName)
+    ; Validar hive slot
+    if (!IsInteger(hiveSlot) || hiveSlot < 1 || hiveSlot > 6) {
+        MsgBox "El numero de hive debe ser entre 1 y 6", "Error", 0x40010
+        return
+    }
+    
+    if (nm_AltGather(fieldName, pattern, hiveSlot)) {
+        AltControlGui["AltStateText"].Text := "Comando enviado: Recolectar en " fieldName " (Hive " hiveSlot ")"
+        nm_setStatus("Sent", "Alt: Gather " fieldName " Hive " hiveSlot)
     } else {
         MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
     }
@@ -174,6 +184,8 @@ nm_AltUpdateStatus(*) {
     }
     
     statusText := "Estado: " status["status"] "`n"
+    if (status.Has("hiveSlot") && status["hiveSlot"] != "")
+        statusText .= "Hive: " status["hiveSlot"] "`n"
     if (status["field"] != "")
         statusText .= "Campo: " status["field"] "`n"
     if (status["action"] != "")
@@ -191,9 +203,11 @@ nm_AltSaveConfig() {
     
     AltControlGui.Submit(false)
     windowTitle := AltControlGui["AltWindowEdit"].Value
+    hiveSlot := AltControlGui["AltHiveSlotEdit"].Value
     
     try {
         IniWrite windowTitle, "settings\nm_config.ini", "AltControl", "AltWindowTitle"
+        IniWrite hiveSlot, "settings\nm_config.ini", "AltControl", "AltHiveSlot"
     } catch {
     }
 }
@@ -207,7 +221,9 @@ nm_AltLoadConfig() {
     
     try {
         windowTitle := IniRead("settings\nm_config.ini", "AltControl", "AltWindowTitle", "AltAccount.ahk ahk_class AutoHotkey")
+        hiveSlot := IniRead("settings\nm_config.ini", "AltControl", "AltHiveSlot", "1")
         AltControlGui["AltWindowEdit"].Value := windowTitle
+        AltControlGui["AltHiveSlotEdit"].Value := hiveSlot
     } catch {
     }
 }

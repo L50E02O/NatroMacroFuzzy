@@ -68,11 +68,14 @@ class AltControl {
     ; Envia comando para que la alt vaya a un campo y recolecte
     ; fieldName: Nombre del campo (ej: "Sunflower", "Pine Tree")
     ; pattern: Patron de recoleccion (opcional)
+    ; hiveSlot: Numero de hive (1-6, opcional)
     ; Devuelve: 1 si se envio correctamente, 0 si hubo error
-    SendGatherCommand(fieldName, pattern := "") {
+    SendGatherCommand(fieldName, pattern := "", hiveSlot := "") {
         command := "GATHER " fieldName
         if (pattern != "")
             command .= " " pattern
+        if (hiveSlot != "")
+            command .= " HIVE:" hiveSlot
         return this.SendCommand(command)
     }
     
@@ -151,11 +154,11 @@ nm_InitAltControlFileShare(sharePath := "") {
 }
 
 ; Funcion global para enviar comando de recoleccion a la alt
-nm_AltGather(fieldName, pattern := "") {
+nm_AltGather(fieldName, pattern := "", hiveSlot := "") {
     global AltController
     if (!IsSet(AltController) || !AltController.IsEnabled)
         return 0
-    return AltController.SendGatherCommand(fieldName, pattern)
+    return AltController.SendGatherCommand(fieldName, pattern, hiveSlot)
 }
 
 ; Funcion global para detener la alt
