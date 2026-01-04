@@ -3,6 +3,7 @@ Natro Macro (https://github.com/NatroTeam/NatroMacro)
 Copyright © Natro Team (https://github.com/NatroTeam)
 
 Funciones GUI para el control de Alt Account
+Mejorada con cambio dinamico de campos (inspirado en Revolution Macro)
 */
 
 ; Variables globales para la GUI de Alt Control
@@ -40,19 +41,20 @@ nm_AltControlGUI(*) {
     AltControlGui.Add("Button", "x420 y28 w60 h20 vAltConnectButton", "Conectar").OnEvent("Click", nm_AltConnect)
     AltControlGui.Add("Text", "x20 y80 w460 +BackgroundTrans vAltStatusText", "Estado: No conectado")
     
-    ; Control de campos
-    AltControlGui.Add("GroupBox", "x10 y120 w480 h200", "Asignar Campo a Alt")
+    ; Control de campos (mejorado para cambio dinamico)
+    AltControlGui.Add("GroupBox", "x10 y120 w480 h180", "Control de Campos")
     AltControlGui.Add("Text", "x20 y140 w100 +BackgroundTrans", "Campo:")
     AltControlGui.Add("DropDownList", "x120 y138 w150 h200 vAltFieldSelect", AltControlFields)
     AltControlGui.Add("Text", "x20 y165 w100 +BackgroundTrans", "Patron:")
     AltControlGui.Add("DropDownList", "x120 y163 w150 h200 vAltPatternSelect", AltControlPatterns)
-    AltControlGui.Add("Button", "x280 y138 w100 h30 vAltSendGatherButton", "Enviar a Recolectar").OnEvent("Click", nm_AltSendGather)
-    AltControlGui.Add("Button", "x280 y173 w100 h30 vAltStopButton", "Detener Alt").OnEvent("Click", nm_AltStopGUI)
-    AltControlGui.Add("Button", "x280 y208 w100 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
+    AltControlGui.Add("Button", "x280 y138 w100 h30 vAltSendGatherButton", "Iniciar Recoleccion").OnEvent("Click", nm_AltSendGather)
+    AltControlGui.Add("Button", "x280 y173 w100 h30 vAltChangeFieldButton", "Cambiar Campo").OnEvent("Click", nm_AltChangeFieldGUI)
+    AltControlGui.Add("Button", "x280 y208 w100 h30 vAltStopButton", "Detener Alt").OnEvent("Click", nm_AltStopGUI)
+    AltControlGui.Add("Button", "x390 y138 w90 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
     
     ; Estado de la Alt
-    AltControlGui.Add("GroupBox", "x10 y330 w480 h100", "Estado de Alt Account")
-    AltControlGui.Add("Text", "x20 y350 w460 h80 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
+    AltControlGui.Add("GroupBox", "x10 y310 w480 h100", "Estado de Alt Account")
+    AltControlGui.Add("Text", "x20 y330 w460 h80 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
     
     ; Timer para actualizar estado
     SetTimer nm_AltUpdateStatus, 2000
@@ -60,7 +62,7 @@ nm_AltControlGUI(*) {
     ; Cargar configuracion guardada
     nm_AltLoadConfig()
     
-    AltControlGui.Show("w500 h440")
+    AltControlGui.Show("w500 h420")
     nm_AltUpdateStatus()
 }
 
@@ -76,7 +78,7 @@ nm_AltControlGUIClose(*) {
 nm_AltControlGUISize(GuiObj, MinMax, Width, Height) {
     ; Mantener tamaño minimo
     newWidth := Width < 500 ? 500 : Width
-    newHeight := Height < 440 ? 440 : Height
+    newHeight := Height < 420 ? 420 : Height
     
     if (newWidth != Width || newHeight != Height)
         GuiObj.Show("w" newWidth " h" newHeight)
@@ -158,6 +160,32 @@ nm_AltSendGather(*) {
     if (nm_AltGather(fieldName, pattern)) {
         AltControlGui["AltStateText"].Text := "Comando enviado: Recolectar en " fieldName " con patron " pattern
         nm_setStatus("Sent", "Alt: Gather " fieldName)
+    } else {
+        MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
+    }
+}
+
+; Cambia el campo dinamicamente (nueva funcionalidad inspirada en Revolution Macro)
+nm_AltChangeFieldGUI(*) {
+    global AltControlGui, AltController
+    
+    if (!IsSet(AltController) || !AltController.IsEnabled) {
+        MsgBox "Primero debes conectar con la alt account", "Error", 0x40010
+        return
+    }
+    
+    AltControlGui.Submit(false)
+    fieldName := AltControlGui["AltFieldSelect"].Text
+    pattern := AltControlGui["AltPatternSelect"].Text
+    
+    if (fieldName = "") {
+        MsgBox "Por favor selecciona un campo", "Error", 0x40010
+        return
+    }
+    
+    if (nm_AltChangeField(fieldName, pattern)) {
+        AltControlGui["AltStateText"].Text := "Comando enviado: Cambiar a " fieldName " (interrumpe gathering actual)"
+        nm_setStatus("Sent", "Alt: Change to " fieldName)
     } else {
         MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
     }
@@ -262,4 +290,3 @@ nm_AltLoadConfig() {
         ; Ignorar error si no existe la configuracion
     }
 }
-

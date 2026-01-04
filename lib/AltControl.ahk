@@ -71,6 +71,34 @@ class AltControl {
         return this.SendCommand(command)
     }
     
+    ; Envia comando avanzado de recoleccion (inspirado en Revolution Macro)
+    ; fieldName: Nombre del campo
+    ; pattern: Patron de recoleccion
+    ; gatherTime: Tiempo de recoleccion en minutos (0 = infinito)
+    ; rotateFields: Si debe rotar entre campos
+    ; Devuelve: 1 si se envio correctamente, 0 si hubo error
+    SendGatherCommandAdvanced(fieldName, pattern := "", gatherTime := 0, rotateFields := false) {
+        command := "GATHER " fieldName
+        if (pattern != "")
+            command .= " " pattern
+        if (gatherTime > 0)
+            command .= " TIME:" gatherTime
+        if (rotateFields)
+            command .= " ROTATE:1"
+        return this.SendCommand(command)
+    }
+    
+    ; Envia comando para cambiar de campo (prioridad alta, interrumpe gathering actual)
+    ; fieldName: Nuevo campo al que cambiar
+    ; pattern: Patron de recoleccion (opcional)
+    ; Devuelve: 1 si se envio correctamente, 0 si hubo error
+    SendChangeFieldCommand(fieldName, pattern := "") {
+        command := "CHANGE_FIELD " fieldName
+        if (pattern != "")
+            command .= " " pattern
+        return this.SendCommand(command)
+    }
+    
     ; Envia comando para detener la alt account
     ; Devuelve: 1 si se envio correctamente, 0 si hubo error
     SendStopCommand() {
@@ -152,6 +180,22 @@ nm_AltGather(fieldName, pattern := "") {
     if (!IsSet(AltController) || !AltController.IsEnabled)
         return 0
     return AltController.SendGatherCommand(fieldName, pattern)
+}
+
+; Funcion global para enviar comando avanzado de recoleccion (inspirado en Revolution Macro)
+nm_AltGatherAdvanced(fieldName, pattern := "", gatherTime := 0, rotateFields := false) {
+    global AltController
+    if (!IsSet(AltController) || !AltController.IsEnabled)
+        return 0
+    return AltController.SendGatherCommandAdvanced(fieldName, pattern, gatherTime, rotateFields)
+}
+
+; Funcion global para cambiar de campo dinamicamente (interrumpe gathering actual)
+nm_AltChangeField(fieldName, pattern := "") {
+    global AltController
+    if (!IsSet(AltController) || !AltController.IsEnabled)
+        return 0
+    return AltController.SendChangeFieldCommand(fieldName, pattern)
 }
 
 ; Funcion global para detener la alt

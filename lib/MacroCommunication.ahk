@@ -54,11 +54,15 @@ class ICommunicationStrategy {
 }
 
 ; Estrategia de comunicacion mediante archivos compartidos en red
+; Mejorada con sistema de relay y ACK (inspirado en Revolution Macro)
 class FileShareStrategy extends ICommunicationStrategy {
     CommandFile := ""
     StatusFile := ""
+    AckFile := ""
     SharePath := ""
     LastCommandTime := 0
+    LastCommandID := 0
+    PendingCommands := Map()  ; Cola de comandos pendientes de ACK
     
     Init(config) {
         if (!config.Has("sharePath"))
@@ -67,9 +71,11 @@ class FileShareStrategy extends ICommunicationStrategy {
         this.SharePath := config["sharePath"]
         commandFileName := config.Has("commandFile") ? config["commandFile"] : "alt_command.txt"
         statusFileName := config.Has("statusFile") ? config["statusFile"] : "alt_status.txt"
+        ackFileName := config.Has("ackFile") ? config["ackFile"] : "alt_ack.txt"
         
         this.CommandFile := this.SharePath "\" commandFileName
         this.StatusFile := this.SharePath "\" statusFileName
+        this.AckFile := this.SharePath "\" ackFileName
         
         ; Verificar que el directorio compartido existe
         try {
@@ -79,6 +85,12 @@ class FileShareStrategy extends ICommunicationStrategy {
             return 0
         }
         
+        ; Limpiar archivos antiguos al iniciar
+        try {
+            FileDelete this.AckFile
+        } catch {
+        }
+        
         return 1
     }
     
@@ -86,15 +98,101 @@ class FileShareStrategy extends ICommunicationStrategy {
         if (this.CommandFile = "")
             return 0
         
-        try {
-            file := FileOpen(this.CommandFile, "w-d")
-            if (!file)
+        ; Sistema de relay con ACK (inspirado en Revolution Macro)
+        ; Generar ID unico para el comando
+        this.LastCommandID++
+        commandID := this.LastCommandID
+        timestamp := A_TickCount
+        
+        ; Formato: ID:TIMESTAMP:COMMAND
+        fullMessage := commandID ":" timestamp ":" message
+        
+        ; Guardar en cola pendiente
+        this.PendingCommands[commandID] := Map("message", message, "timestamp", timestamp, "retries", 0)
+        
+        ; Enviar comando con retry
+        maxRetries := 3
+        retryDelay := 200
+        
+        Loop maxRetries {
+            try {
+                file := FileOpen(this.CommandFile, "w-d")
+                if (!file) {
+                    if (A_Index < maxRetries) {
+                        Sleep retryDelay
+                        continue
+                    }
+                    return 0
+                }
+                file.Write(fullMessage)
+                file.Close()
+                
+                ; Esperar ACK (hasta 2 segundos)
+                ackReceived := false
+                Loop 20 {
+                    Sleep 100
+                    if (this.CheckAck(commandID)) {
+                        ackReceived := true
+                        this.PendingCommands.Delete(commandID)
+                        return 1
+                    }
+                }
+                
+                ; Si no hay ACK, reintentar
+                if (!ackReceived && A_Index < maxRetries) {
+                    this.PendingCommands[commandID]["retries"]++
+                    Sleep retryDelay
+                    continue
+                }
+                
+                ; Si llega aqui y no hay ACK, pero se envio, asumir exito
+                if (A_Index = maxRetries) {
+                    ; Limpiar de pendientes despues de un tiempo
+                    this.PendingCommands.Delete(commandID)
+                    return 1
+                }
+                
+            } catch {
+                if (A_Index < maxRetries) {
+                    Sleep retryDelay
+                    continue
+                }
                 return 0
-            file.Write(message)
+            }
+        }
+        
+        return 0
+    }
+    
+    ; Verifica si se recibio ACK para un comando
+    CheckAck(commandID) {
+        if (this.AckFile = "")
+            return false
+        
+        try {
+            if (!FileExist(this.AckFile))
+                return false
+            
+            file := FileOpen(this.AckFile, "r")
+            if (!file)
+                return false
+            
+            ackContent := Trim(file.Read())
             file.Close()
-            return 1
+            
+            ; Formato ACK: ID:TIMESTAMP
+            if (InStr(ackContent, commandID ":") = 1) {
+                ; Limpiar archivo ACK
+                try {
+                    FileDelete this.AckFile
+                } catch {
+                }
+                return true
+            }
+            
+            return false
         } catch {
-            return 0
+            return false
         }
     }
     
@@ -115,10 +213,33 @@ class FileShareStrategy extends ICommunicationStrategy {
             if (!file)
                 return ""
             
-            message := Trim(file.Read())
+            fullMessage := Trim(file.Read())
             file.Close()
             
-            ; Limpiar el archivo despues de leerlo
+            ; Parsear mensaje con formato: ID:TIMESTAMP:COMMAND
+            parts := StrSplit(fullMessage, ":", , 3)
+            if (parts.Length < 3) {
+                ; Formato legacy, sin ID
+                message := fullMessage
+                commandID := 0
+            } else {
+                commandID := Integer(parts[1])
+                message := parts[3]
+            }
+            
+            ; Enviar ACK de confirmacion (sistema de relay)
+            if (commandID > 0 && this.AckFile != "") {
+                try {
+                    ackFile := FileOpen(this.AckFile, "w-d")
+                    if (ackFile) {
+                        ackFile.Write(commandID ":" A_TickCount)
+                        ackFile.Close()
+                    }
+                } catch {
+                }
+            }
+            
+            ; Limpiar el archivo despues de leerlo y enviar ACK
             try {
                 FileDelete this.CommandFile
             } catch {
@@ -286,7 +407,8 @@ class CommunicationFactory {
                 return Map(
                     "sharePath", "",
                     "commandFile", "alt_command.txt",
-                    "statusFile", "alt_status.txt"
+                    "statusFile", "alt_status.txt",
+                    "ackFile", "alt_ack.txt"
                 )
             case "tcp", "socket":
                 return Map(
