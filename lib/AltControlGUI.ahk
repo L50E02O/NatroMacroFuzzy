@@ -2,8 +2,7 @@
 Natro Macro (https://github.com/NatroTeam/NatroMacro)
 Copyright © Natro Team (https://github.com/NatroTeam)
 
-Funciones GUI para el control de Alt Account
-Mejorada con cambio dinamico de campos (inspirado en Revolution Macro)
+Funciones GUI para el control de Alt Account - Simplificado como Revolution Macro
 */
 
 ; Variables globales para la GUI de Alt Control
@@ -22,51 +21,48 @@ nm_AltControlGUI(*) {
             AltControlGui.Focus()
             return
         } catch {
-            ; GUI fue destruida, crear una nueva
         }
     }
     
     ; Crear nueva GUI
-    AltControlGui := Gui("+Resize +OwnDialogs", "Alt Account Control")
+    AltControlGui := Gui("+OwnDialogs", "Alt Account Control")
     AltControlGui.OnEvent("Close", nm_AltControlGUIClose)
-    AltControlGui.OnEvent("Size", nm_AltControlGUISize)
     
-    ; Configuracion de conexion
-    AltControlGui.Add("GroupBox", "x10 y10 w480 h100", "Configuracion de Conexion")
-    AltControlGui.Add("Text", "x20 y30 w100 +BackgroundTrans", "IP de Alt Account:")
-    AltControlGui.Add("Edit", "x120 y28 w200 h20 vAltIPEdit", "")
-    AltControlGui.Add("Text", "x20 y55 w100 +BackgroundTrans", "Ruta Compartida:")
-    AltControlGui.Add("Edit", "x120 y53 w300 h20 vAltShareEdit", "")
-    AltControlGui.Add("Button", "x330 y28 w80 h20 vAltTestButton", "Probar Conexion").OnEvent("Click", nm_AltTestConnection)
-    AltControlGui.Add("Button", "x420 y28 w60 h20 vAltConnectButton", "Conectar").OnEvent("Click", nm_AltConnect)
-    AltControlGui.Add("Text", "x20 y80 w460 +BackgroundTrans vAltStatusText", "Estado: No conectado")
+    ; Configuracion simple (como Revolution Macro)
+    AltControlGui.Add("GroupBox", "x10 y10 w480 h80", "Conexion")
+    AltControlGui.Add("Text", "x20 y30 w120 +BackgroundTrans", "Nombre de Ventana:")
+    AltControlGui.Add("Edit", "x140 y28 w250 h20 vAltWindowEdit", "AltAccount.ahk ahk_class AutoHotkey")
+    AltControlGui.Add("Button", "x400 y28 w80 h20 vAltConnectButton", "Conectar").OnEvent("Click", nm_AltConnect)
+    AltControlGui.Add("Text", "x20 y55 w460 +BackgroundTrans vAltStatusText", "Estado: No conectado")
     
-    ; Control de campos (mejorado para cambio dinamico)
-    AltControlGui.Add("GroupBox", "x10 y120 w480 h180", "Control de Campos")
-    AltControlGui.Add("Text", "x20 y140 w100 +BackgroundTrans", "Campo:")
-    AltControlGui.Add("DropDownList", "x120 y138 w150 h200 vAltFieldSelect", AltControlFields)
-    AltControlGui.Add("Text", "x20 y165 w100 +BackgroundTrans", "Patron:")
-    AltControlGui.Add("DropDownList", "x120 y163 w150 h200 vAltPatternSelect", AltControlPatterns)
-    AltControlGui.Add("Button", "x280 y138 w100 h30 vAltSendGatherButton", "Iniciar Recoleccion").OnEvent("Click", nm_AltSendGather)
-    AltControlGui.Add("Button", "x280 y173 w100 h30 vAltChangeFieldButton", "Cambiar Campo").OnEvent("Click", nm_AltChangeFieldGUI)
-    AltControlGui.Add("Button", "x280 y208 w100 h30 vAltStopButton", "Detener Alt").OnEvent("Click", nm_AltStopGUI)
-    AltControlGui.Add("Button", "x390 y138 w90 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
+    ; Control de campos
+    AltControlGui.Add("GroupBox", "x10 y100 w480 h150", "Asignar Campo")
+    AltControlGui.Add("Text", "x20 y120 w100 +BackgroundTrans", "Campo:")
+    AltControlGui.Add("DropDownList", "x120 y118 w150 h200 vAltFieldSelect", AltControlFields)
+    AltControlGui.Add("Text", "x20 y145 w100 +BackgroundTrans", "Patron:")
+    AltControlGui.Add("DropDownList", "x120 y143 w150 h200 vAltPatternSelect", AltControlPatterns)
+    AltControlGui.Add("Button", "x280 y118 w100 h30 vAltSendGatherButton", "Enviar a Recolectar").OnEvent("Click", nm_AltSendGather)
+    AltControlGui.Add("Button", "x280 y153 w100 h30 vAltStopButton", "Detener").OnEvent("Click", nm_AltStopGUI)
+    AltControlGui.Add("Button", "x390 y118 w90 h30 vAltReturnButton", "Regresar al Hive").OnEvent("Click", nm_AltReturnToHiveGUI)
     
     ; Estado de la Alt
-    AltControlGui.Add("GroupBox", "x10 y310 w480 h100", "Estado de Alt Account")
-    AltControlGui.Add("Text", "x20 y330 w460 h80 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
+    AltControlGui.Add("GroupBox", "x10 y260 w480 h80", "Estado de Alt Account")
+    AltControlGui.Add("Text", "x20 y280 w460 h60 +BackgroundTrans -Wrap vAltStateText", "Esperando conexion...")
     
     ; Timer para actualizar estado
-    SetTimer nm_AltUpdateStatus, 2000
+    SetTimer nm_AltUpdateStatus, 1000
     
-    ; Cargar configuracion guardada
+    ; Intentar conectar automaticamente si ya hay configuracion
     nm_AltLoadConfig()
+    if (AltControlGui["AltWindowEdit"].Value != "") {
+        nm_AltConnect()
+    }
     
-    AltControlGui.Show("w500 h420")
+    AltControlGui.Show("w500 h350")
     nm_AltUpdateStatus()
 }
 
-; Cierra la GUI de Alt Control
+; Cierra la GUI
 nm_AltControlGUIClose(*) {
     global AltControlGui
     SetTimer nm_AltUpdateStatus, 0
@@ -74,54 +70,15 @@ nm_AltControlGUIClose(*) {
     AltControlGui := ""
 }
 
-; Maneja el redimensionamiento de la GUI
-nm_AltControlGUISize(GuiObj, MinMax, Width, Height) {
-    ; Mantener tamaño minimo
-    newWidth := Width < 500 ? 500 : Width
-    newHeight := Height < 420 ? 420 : Height
-    
-    if (newWidth != Width || newHeight != Height)
-        GuiObj.Show("w" newWidth " h" newHeight)
-}
-
-; Prueba la conexion con la alt account
-nm_AltTestConnection(*) {
-    global AltControlGui, AltController
-    
-    AltControlGui.Submit(false)
-    altIP := AltControlGui["AltIPEdit"].Value
-    sharePath := AltControlGui["AltShareEdit"].Value
-    
-    if (altIP = "" || sharePath = "") {
-        MsgBox "Por favor ingresa la IP y la ruta compartida", "Error", 0x40010
-        return
-    }
-    
-    ; Inicializar controlador
-    if (!IsSet(AltController))
-        AltController := AltControl()
-    
-    AltController.InitFileShare(altIP, sharePath)
-    
-    if (AltController.TestConnection()) {
-        MsgBox "Conexion exitosa!", "Exito", 0x40040
-        AltControlGui["AltStatusText"].Text := "Estado: Conexion disponible"
-    } else {
-        MsgBox "No se pudo conectar. Verifica que:`n- La IP sea correcta`n- La ruta compartida exista`n- El firewall permita el acceso", "Error de Conexion", 0x40010
-        AltControlGui["AltStatusText"].Text := "Estado: Error de conexion"
-    }
-}
-
 ; Conecta con la alt account
 nm_AltConnect(*) {
     global AltControlGui, AltController
     
     AltControlGui.Submit(false)
-    altIP := AltControlGui["AltIPEdit"].Value
-    sharePath := AltControlGui["AltShareEdit"].Value
+    windowTitle := AltControlGui["AltWindowEdit"].Value
     
-    if (altIP = "" || sharePath = "") {
-        MsgBox "Por favor ingresa la IP y la ruta compartida", "Error", 0x40010
+    if (windowTitle = "") {
+        MsgBox "Por favor ingresa el nombre de la ventana de la alt account", "Error", 0x40010
         return
     }
     
@@ -129,17 +86,16 @@ nm_AltConnect(*) {
     if (!IsSet(AltController))
         AltController := AltControl()
     
-    if (nm_InitAltControl(altIP, sharePath)) {
+    if (nm_InitAltControl(windowTitle)) {
         AltControlGui["AltStatusText"].Text := "Estado: Conectado"
         nm_AltSaveConfig()
-        MsgBox "Conectado exitosamente a la alt account!", "Exito", 0x40040
     } else {
-        AltControlGui["AltStatusText"].Text := "Estado: Error de conexion"
-        MsgBox "No se pudo conectar. Verifica la configuracion.", "Error", 0x40010
+        AltControlGui["AltStatusText"].Text := "Estado: No se pudo conectar. Verifica que la alt account este ejecutandose."
+        MsgBox "No se pudo conectar. Asegurate de que:`n- La alt account este ejecutandose`n- El nombre de la ventana sea correcto", "Error", 0x40010
     }
 }
 
-; Envia comando de recoleccion a la alt
+; Envia comando de recoleccion
 nm_AltSendGather(*) {
     global AltControlGui, AltController
     
@@ -158,40 +114,14 @@ nm_AltSendGather(*) {
     }
     
     if (nm_AltGather(fieldName, pattern)) {
-        AltControlGui["AltStateText"].Text := "Comando enviado: Recolectar en " fieldName " con patron " pattern
+        AltControlGui["AltStateText"].Text := "Comando enviado: Recolectar en " fieldName
         nm_setStatus("Sent", "Alt: Gather " fieldName)
     } else {
         MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
     }
 }
 
-; Cambia el campo dinamicamente (nueva funcionalidad inspirada en Revolution Macro)
-nm_AltChangeFieldGUI(*) {
-    global AltControlGui, AltController
-    
-    if (!IsSet(AltController) || !AltController.IsEnabled) {
-        MsgBox "Primero debes conectar con la alt account", "Error", 0x40010
-        return
-    }
-    
-    AltControlGui.Submit(false)
-    fieldName := AltControlGui["AltFieldSelect"].Text
-    pattern := AltControlGui["AltPatternSelect"].Text
-    
-    if (fieldName = "") {
-        MsgBox "Por favor selecciona un campo", "Error", 0x40010
-        return
-    }
-    
-    if (nm_AltChangeField(fieldName, pattern)) {
-        AltControlGui["AltStateText"].Text := "Comando enviado: Cambiar a " fieldName " (interrumpe gathering actual)"
-        nm_setStatus("Sent", "Alt: Change to " fieldName)
-    } else {
-        MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
-    }
-}
-
-; Detiene la alt account
+; Detiene la alt
 nm_AltStopGUI(*) {
     global AltControlGui, AltController
     
@@ -204,11 +134,11 @@ nm_AltStopGUI(*) {
         AltControlGui["AltStateText"].Text := "Comando enviado: Detener"
         nm_setStatus("Sent", "Alt: Stop")
     } else {
-        MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
+        MsgBox "Error al enviar comando.", "Error", 0x40010
     }
 }
 
-; Envia comando para que la alt regrese al hive
+; Regresa al hive
 nm_AltReturnToHiveGUI(*) {
     global AltControlGui, AltController
     
@@ -221,11 +151,11 @@ nm_AltReturnToHiveGUI(*) {
         AltControlGui["AltStateText"].Text := "Comando enviado: Regresar al Hive"
         nm_setStatus("Sent", "Alt: Return to Hive")
     } else {
-        MsgBox "Error al enviar comando. Verifica la conexion.", "Error", 0x40010
+        MsgBox "Error al enviar comando.", "Error", 0x40010
     }
 }
 
-; Actualiza el estado de la alt account
+; Actualiza el estado
 nm_AltUpdateStatus(*) {
     global AltControlGui, AltController
     
@@ -252,7 +182,7 @@ nm_AltUpdateStatus(*) {
     AltControlGui["AltStateText"].Text := statusText
 }
 
-; Guarda la configuracion de alt
+; Guarda la configuracion
 nm_AltSaveConfig() {
     global AltControlGui
     
@@ -260,18 +190,15 @@ nm_AltSaveConfig() {
         return
     
     AltControlGui.Submit(false)
-    altIP := AltControlGui["AltIPEdit"].Value
-    sharePath := AltControlGui["AltShareEdit"].Value
+    windowTitle := AltControlGui["AltWindowEdit"].Value
     
     try {
-        IniWrite altIP, "settings\nm_config.ini", "AltControl", "AltIP"
-        IniWrite sharePath, "settings\nm_config.ini", "AltControl", "AltSharePath"
+        IniWrite windowTitle, "settings\nm_config.ini", "AltControl", "AltWindowTitle"
     } catch {
-        ; Ignorar error
     }
 }
 
-; Carga la configuracion de alt
+; Carga la configuracion
 nm_AltLoadConfig() {
     global AltControlGui
     
@@ -279,14 +206,8 @@ nm_AltLoadConfig() {
         return
     
     try {
-        altIP := IniRead("settings\nm_config.ini", "AltControl", "AltIP", "")
-        sharePath := IniRead("settings\nm_config.ini", "AltControl", "AltSharePath", "")
-        
-        if (altIP != "")
-            AltControlGui["AltIPEdit"].Value := altIP
-        if (sharePath != "")
-            AltControlGui["AltShareEdit"].Value := sharePath
+        windowTitle := IniRead("settings\nm_config.ini", "AltControl", "AltWindowTitle", "AltAccount.ahk ahk_class AutoHotkey")
+        AltControlGui["AltWindowEdit"].Value := windowTitle
     } catch {
-        ; Ignorar error si no existe la configuracion
     }
 }

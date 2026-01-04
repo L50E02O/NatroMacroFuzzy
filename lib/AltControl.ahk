@@ -2,7 +2,8 @@
 Natro Macro (https://github.com/NatroTeam/NatroMacro)
 Copyright © Natro Team (https://github.com/NatroTeam)
 
-Sistema de control de Alt Account usando comunicacion abstracta entre macros
+Sistema de control de Alt Account - Adaptado de Revolution Macro
+Usa WM_COPYDATA para comunicacion directa (mas rapido y simple)
 */
 
 #Include "MacroCommunication.ahk"
@@ -11,36 +12,40 @@ Sistema de control de Alt Account usando comunicacion abstracta entre macros
 class AltControl {
     Communication := ""
     IsEnabled := false
-    ConnectionType := "fileshare"
+    ConnectionType := "wmcopydata"
     
     ; Inicializa el sistema de control de alt
-    ; type: Tipo de comunicacion ("fileshare", "tcp", etc.)
-    ; config: Map con la configuracion de la comunicacion
-    ;   Para fileshare: {"sharePath": "\\192.168.1.100\NatroMacro", "commandFile": "alt_command.txt", "statusFile": "alt_status.txt"}
-    ;   Para tcp: {"host": "192.168.1.100", "port": 8888, "isServer": false}
+    ; windowTitle: Titulo de la ventana de la alt account (ej: "AltAccount.ahk ahk_class AutoHotkey")
     ; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
-    Init(type := "fileshare", config := Map()) {
-        this.ConnectionType := type
+    Init(windowTitle := "AltAccount.ahk ahk_class AutoHotkey") {
+        this.ConnectionType := "wmcopydata"
         this.Communication := MacroCommunication()
         
-        if (!this.Communication.Init(type, config))
+        config := Map("targetWindowTitle", windowTitle)
+        if (!this.Communication.Init("wmcopydata", config))
             return 0
         
         this.IsEnabled := true
         return 1
     }
     
-    ; Inicializa usando archivos compartidos (metodo legacy para compatibilidad)
-    ; altIP: IP de la computadora donde corre la alt account (no se usa, solo para compatibilidad)
+    ; Inicializa usando archivos compartidos (fallback para red)
     ; sharePath: Ruta compartida en red
     ; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
-    InitFileShare(altIP := "", sharePath := "") {
+    InitFileShare(sharePath := "") {
         config := Map(
             "sharePath", sharePath,
             "commandFile", "alt_command.txt",
             "statusFile", "alt_status.txt"
         )
-        return this.Init("fileshare", config)
+        this.ConnectionType := "fileshare"
+        this.Communication := MacroCommunication()
+        
+        if (!this.Communication.Init("fileshare", config))
+            return 0
+        
+        this.IsEnabled := true
+        return 1
     }
     
     ; Envia un comando a la alt account
@@ -62,38 +67,10 @@ class AltControl {
     
     ; Envia comando para que la alt vaya a un campo y recolecte
     ; fieldName: Nombre del campo (ej: "Sunflower", "Pine Tree")
-    ; pattern: Patron de recoleccion (opcional, usa el default si no se especifica)
+    ; pattern: Patron de recoleccion (opcional)
     ; Devuelve: 1 si se envio correctamente, 0 si hubo error
     SendGatherCommand(fieldName, pattern := "") {
         command := "GATHER " fieldName
-        if (pattern != "")
-            command .= " " pattern
-        return this.SendCommand(command)
-    }
-    
-    ; Envia comando avanzado de recoleccion (inspirado en Revolution Macro)
-    ; fieldName: Nombre del campo
-    ; pattern: Patron de recoleccion
-    ; gatherTime: Tiempo de recoleccion en minutos (0 = infinito)
-    ; rotateFields: Si debe rotar entre campos
-    ; Devuelve: 1 si se envio correctamente, 0 si hubo error
-    SendGatherCommandAdvanced(fieldName, pattern := "", gatherTime := 0, rotateFields := false) {
-        command := "GATHER " fieldName
-        if (pattern != "")
-            command .= " " pattern
-        if (gatherTime > 0)
-            command .= " TIME:" gatherTime
-        if (rotateFields)
-            command .= " ROTATE:1"
-        return this.SendCommand(command)
-    }
-    
-    ; Envia comando para cambiar de campo (prioridad alta, interrumpe gathering actual)
-    ; fieldName: Nuevo campo al que cambiar
-    ; pattern: Patron de recoleccion (opcional)
-    ; Devuelve: 1 si se envio correctamente, 0 si hubo error
-    SendChangeFieldCommand(fieldName, pattern := "") {
-        command := "CHANGE_FIELD " fieldName
         if (pattern != "")
             command .= " " pattern
         return this.SendCommand(command)
@@ -137,17 +114,27 @@ class AltControl {
     }
 }
 
-; Funcion global para inicializar el control de alt (compatibilidad legacy)
-; altIP: IP de la computadora de la alt (no se usa realmente, solo para compatibilidad)
-; sharePath: Ruta compartida en red
+; Funcion global para inicializar el control de alt (simple, como Revolution Macro)
+; windowTitle: Titulo de la ventana de la alt (por defecto busca "AltAccount.ahk")
 ; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
-nm_InitAltControl(altIP := "", sharePath := "") {
+nm_InitAltControl(windowTitle := "AltAccount.ahk ahk_class AutoHotkey") {
+    global AltController
+    if (!IsSet(AltController))
+        AltController := AltControl()
+    
+    result := AltController.Init(windowTitle)
+    if (result)
+        return AltController.TestConnection()
+    return 0
+}
+
+; Funcion global para inicializar usando archivos compartidos (para red)
+nm_InitAltControlFileShare(sharePath := "") {
     global AltController
     if (!IsSet(AltController))
         AltController := AltControl()
     
     if (sharePath = "") {
-        ; Intentar leer de configuracion
         try {
             sharePath := IniRead("settings\nm_config.ini", "AltControl", "AltSharePath", "")
             if (sharePath = "")
@@ -157,21 +144,10 @@ nm_InitAltControl(altIP := "", sharePath := "") {
         }
     }
     
-    result := AltController.InitFileShare(altIP, sharePath)
+    result := AltController.InitFileShare(sharePath)
     if (result)
         return AltController.TestConnection()
     return 0
-}
-
-; Funcion global para inicializar el control de alt con configuracion avanzada
-; type: Tipo de comunicacion ("fileshare", "tcp", etc.)
-; config: Map con la configuracion
-; Devuelve: 1 si se inicializo correctamente, 0 si hubo error
-nm_InitAltControlAdvanced(type, config) {
-    global AltController
-    if (!IsSet(AltController))
-        AltController := AltControl()
-    return AltController.Init(type, config)
 }
 
 ; Funcion global para enviar comando de recoleccion a la alt
@@ -180,22 +156,6 @@ nm_AltGather(fieldName, pattern := "") {
     if (!IsSet(AltController) || !AltController.IsEnabled)
         return 0
     return AltController.SendGatherCommand(fieldName, pattern)
-}
-
-; Funcion global para enviar comando avanzado de recoleccion (inspirado en Revolution Macro)
-nm_AltGatherAdvanced(fieldName, pattern := "", gatherTime := 0, rotateFields := false) {
-    global AltController
-    if (!IsSet(AltController) || !AltController.IsEnabled)
-        return 0
-    return AltController.SendGatherCommandAdvanced(fieldName, pattern, gatherTime, rotateFields)
-}
-
-; Funcion global para cambiar de campo dinamicamente (interrumpe gathering actual)
-nm_AltChangeField(fieldName, pattern := "") {
-    global AltController
-    if (!IsSet(AltController) || !AltController.IsEnabled)
-        return 0
-    return AltController.SendChangeFieldCommand(fieldName, pattern)
 }
 
 ; Funcion global para detener la alt
